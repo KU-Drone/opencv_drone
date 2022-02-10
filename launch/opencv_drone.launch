@@ -1,0 +1,9 @@
+<launch>
+    <include file="$(find iq_sim)/launch/runway.launch"/>
+    <node name="sitl" pkg="iq_sim" type="startsitl.sh"/>
+    <include file="$(find iq_sim)/launch/apm.launch" output="log"/>
+    <!--
+    <node name="webcam_viz" pkg="opencv_drone" type="webcam_viz.py"/>
+    <node pkg="rviz" name="rviz" type="rviz" args="-d $(find opencv_drone)/rviz/rviz_config.rviz"/>
+    -->
+</launch>
