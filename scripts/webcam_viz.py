@@ -15,6 +15,7 @@ import numpy as np
 import math as m
 import matplotlib.pyplot as plt
 from sklearn.neighbors import KDTree
+from scipy.interpolate import griddata
 
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -60,8 +61,6 @@ def imgCallback(data):
     cam_image = bridge.imgmsg_to_cv2(data, desired_encoding="bgr8")
 
 def sampleImg(projected_pts, raw_img, step=0.1):
-    tree = KDTree(projected_pts.T)
-
     x_min = np.min(projected_pts[0])
     x_max = np.max(projected_pts[0])
 
@@ -72,28 +71,55 @@ def sampleImg(projected_pts, raw_img, step=0.1):
     x = np.arange(x_min, x_max, step)
     query_pts = cartesian_cross_product(x, y)
     times.append(time.time())
-    # print(query_pts)
+    
     img_matrix = np.array(cam_image).reshape((IMG_HEIGHT*IMG_WIDTH, 3))
 
     height = np.shape(y)[0]
     width = np.shape(x)[0]
 
-    dist, ind = tree.query(query_pts, k=1)
-    # img_matrix = img_matrix[ind]
-    # new_img = np.zeros((height, width, 3), dtype = np.uint8)
-    # for i in range(np.shape(ind)[0]):
-    #     new_img[i//width][i%width] = img_matrix[ind[i]]
-    # print(np.shape(img_matrix[:,0]))
-    b = np.take_along_axis(img_matrix[:,0], ind[:,0], 0).reshape((1, height*width))
-    g = np.take_along_axis(img_matrix[:,1], ind[:,0], 0).reshape((1, height*width))
-    r = np.take_along_axis(img_matrix[:,2], ind[:,0], 0).reshape((1, height*width))
-    new_img = np.vstack([b, g, r])
-    print(np.shape(new_img))
-    # print(np.shape(b))
-    # print(new_img)
-    new_img = new_img.T.reshape((height, width, 3))
-    # print(new_img)
+    #k-d tree (slightly less than 4 hz)
+    # tree = KDTree(projected_pts.T)
+    # dist, ind = tree.query(query_pts, k=1)
+    # b = np.take_along_axis(img_matrix[:,0], ind[:,0], 0).reshape((1, height*width))
+    # g = np.take_along_axis(img_matrix[:,1], ind[:,0], 0).reshape((1, height*width))
+    # r = np.take_along_axis(img_matrix[:,2], ind[:,0], 0).reshape((1, height*width))
+    # new_img = np.vstack([b, g, r]).T.reshape((height, width, 3))
 
+    #scipy.interpolate.griddata (less than 1 hz)
+    # method = "nearest"
+    # b = griddata(projected_pts.T, img_matrix[:,0], query_pts, method=method)
+    # g = griddata(projected_pts.T, img_matrix[:,1], query_pts, method=method)
+    # r = griddata(projected_pts.T, img_matrix[:,2], query_pts, method=method)
+    # new_img = np.vstack([b, g, r]).T.reshape((height, width, 3))
+
+    x_range = x_max-x_min
+    y_range = y_max-y_min
+    new_img = np.zeros((height, width, 3), dtype=np.uint8)
+
+    projected_pts = np.around(projected_pts/step)*step
+
+    projected_pts_ind_x = (projected_pts[0]-x_min)/x_range*width
+    projected_pts_ind_y = (projected_pts[1]-y_min)/y_range*height
+
+    projected_pts_ind_x[projected_pts_ind_x<0] = 0
+    projected_pts_ind_x[projected_pts_ind_x>width-1] = width-1
+
+    print(projected_pts_ind_x)
+
+    projected_pts_ind_y[projected_pts_ind_y<0] = 0
+    projected_pts_ind_y[projected_pts_ind_y>height-1] = height-1
+
+    projected_pts_ind = np.vstack([projected_pts_ind_x, projected_pts_ind_y]).astype(int)
+    # projected_pts_ind = (projected_pts_ind_x + projected_pts_ind_y*height).astype(int)
+
+    # new_img = np.take_along_axis(img_matrix, projected_pts_ind.T, axis=0)
+
+    # projected_pts_ind.h
+
+    new_img[projected_pts_ind.T[:, 1], projected_pts_ind.T[:, 0]] = img_matrix
+    new_img = new_img.reshape((height, width, 3))
+
+    
     return new_img
 
 def posCallback(data):
@@ -133,7 +159,7 @@ def posCallback(data):
 
     # pc2 = point_cloud2.create_cloud(header, fields, points[::10])
     # pub.publish(pc2)
-    new_img = sampleImg(projected_points, cam_image, step=0.2)
+    new_img = sampleImg(projected_points, cam_image, step=0.1)
     
     cv2.imshow("img", new_img)
     cv2.waitKey(1)
