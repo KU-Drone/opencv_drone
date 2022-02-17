@@ -20,6 +20,7 @@ from scipy.interpolate import griddata
 from mpl_toolkits.mplot3d import Axes3D
 
 import time
+import pickle
 
 IMG_WIDTH = 640
 IMG_HEIGHT = 480
@@ -29,6 +30,8 @@ IMG_START_POINTS = []
 cam_pos = []
 cam_rotation = []
 cam_image = []
+
+xy_bgr_total = np.array([[],[],[],[],[]])
 
 def cartesian_cross_product(x,y):
     cross_product = np.transpose([np.tile(x, len(y)),np.repeat(y,len(x))])
@@ -60,7 +63,10 @@ def imgCallback(data):
     bridge = CvBridge()
     cam_image = bridge.imgmsg_to_cv2(data, desired_encoding="bgr8")
 
-def sampleImg(projected_pts, raw_img, step=0.1):
+def sampleImg(xy_bgr, step=0.1):
+
+    projected_pts = xy_bgr[0:2]
+    img_matrix = xy_bgr[2:5]
     x_min = np.min(projected_pts[0])
     x_max = np.max(projected_pts[0])
 
@@ -70,9 +76,6 @@ def sampleImg(projected_pts, raw_img, step=0.1):
     y = np.arange(y_min, y_max, step)
     x = np.arange(x_min, x_max, step)
     query_pts = cartesian_cross_product(x, y)
-    times.append(time.time())
-    
-    img_matrix = np.array(cam_image).reshape((IMG_HEIGHT*IMG_WIDTH, 3))
 
     height = np.shape(y)[0]
     width = np.shape(x)[0]
@@ -104,8 +107,6 @@ def sampleImg(projected_pts, raw_img, step=0.1):
     projected_pts_ind_x[projected_pts_ind_x<0] = 0
     projected_pts_ind_x[projected_pts_ind_x>width-1] = width-1
 
-    print(projected_pts_ind_x)
-
     projected_pts_ind_y[projected_pts_ind_y<0] = 0
     projected_pts_ind_y[projected_pts_ind_y>height-1] = height-1
 
@@ -113,13 +114,12 @@ def sampleImg(projected_pts, raw_img, step=0.1):
     # projected_pts_ind = (projected_pts_ind_x + projected_pts_ind_y*height).astype(int)
 
     # new_img = np.take_along_axis(img_matrix, projected_pts_ind.T, axis=0)
-
+    
     # projected_pts_ind.h
 
-    new_img[projected_pts_ind.T[:, 1], projected_pts_ind.T[:, 0]] = img_matrix
+    new_img[projected_pts_ind.T[:, 1], projected_pts_ind.T[:, 0]] = img_matrix.T
     new_img = new_img.reshape((height, width, 3))
 
-    
     return new_img
 
 def posCallback(data):
@@ -159,10 +159,25 @@ def posCallback(data):
 
     # pc2 = point_cloud2.create_cloud(header, fields, points[::10])
     # pub.publish(pc2)
-    new_img = sampleImg(projected_points, cam_image, step=0.1)
+    
+    # global projected_points_total
+    # global img_matrix_total
+
+    img_matrix = np.array(cam_image).reshape((IMG_HEIGHT*IMG_WIDTH, 3)).T
+    xy_bgr = np.vstack([projected_points, img_matrix])
+    if cam_pos[2] > 1:
+        global xy_bgr_total
+        xy_bgr_total = np.hstack([xy_bgr_total, xy_bgr])
+        print(np.shape(xy_bgr_total))
+    new_img = sampleImg(xy_bgr, step=0.1)
     
     cv2.imshow("img", new_img)
     cv2.waitKey(1)
+
+    pickle_file = "scan.pickle"
+    if np.shape(xy_bgr_total)[1] % IMG_HEIGHT*IMG_WIDTH*5 == 0:
+        with open(pickle_file, "wb") as file:
+            pickle.dump(xy_bgr_total, file)
     print(np.shape(new_img))
 
     times.append(time.time())
@@ -226,7 +241,11 @@ def node():
     global pub
     pub = rospy.Publisher('points', PointCloud2, queue_size=10)
     global IMG_START_POINTS
-    IMG_START_POINTS = calculateCamImgInitialPos(IMG_WIDTH, IMG_HEIGHT, IMG_HORIZONTAL_FOV)
+
+    rot = np.array([[0, -1, 0],
+                    [1, 0, 0],
+                    [0, 0, 1]])
+    IMG_START_POINTS = np.matmul(rot, calculateCamImgInitialPos(IMG_WIDTH, IMG_HEIGHT, IMG_HORIZONTAL_FOV))
     print(IMG_START_POINTS)
     rospy.spin()
 
