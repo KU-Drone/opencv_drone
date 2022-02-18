@@ -60,26 +60,35 @@ class ImageAppend:
         x_max_img = np.max(corner_pixel_values.T[0])
         y_min_img = np.min(corner_pixel_values.T[1])
         y_max_img = np.max(corner_pixel_values.T[1])
-        print(x_min_img, y_min_img)
 
         new_width = max(this.width, x_max_img) - min(0, x_min_img)
         new_height = max(this.height, y_max_img) - min(0, y_min_img)
-        new_img = np.zeros((new_height, new_width, this.depth))
+        old_img_new_index = np.zeros((new_height, new_width, this.depth))
+        new_img_new_index = np.zeros((new_height, new_width, this.depth))
         
         new_origin = np.array([[min(0, x_min_img), min(0, y_min_img)]], dtype=np.int)
 
         corner_pixel_values = (corner_pixel_values.T - new_origin.T).T
         
-        new_img[-new_origin[0][1]:this.height-new_origin[0][1],-new_origin[0][0]:this.width-new_origin[0][0]] = this.image[:,:]
-        
+        old_img_new_index[-new_origin[0][1]:this.height-new_origin[0][1],-new_origin[0][0]:this.width-new_origin[0][0]] = this.image[:,:]
+        new_img_new_indexold_img_new_index = old_img_new_index.astype(np.float32)
         x_min_img = np.min(corner_pixel_values.T[0])
         x_max_img = np.max(corner_pixel_values.T[0])
         y_min_img = np.min(corner_pixel_values.T[1])
         y_max_img = np.max(corner_pixel_values.T[1])
 
-        new_img[y_min_img:y_min_img+img_height, x_min_img:x_min_img+img_width] = img[:, :]
+        new_img_new_index[y_min_img:y_min_img+img_height, x_min_img:x_min_img+img_width] = img[:, :]
+        new_img_new_index = new_img_new_index.astype(np.float32)
 
-        this.updateImage(new_img)
+        new_img_new_index_gray = cv2.cvtColor(new_img_new_index, cv2.COLOR_BGR2GRAY)
+        ret, mask = cv2.threshold(new_img_new_index_gray, 1, 255, cv2.THRESH_BINARY)
+        mask_inv = cv2.bitwise_not(mask.astype(np.uint8))
+
+        old_img_new_index = cv2.bitwise_and(old_img_new_index, old_img_new_index, mask=mask_inv.astype(np.uint8))
+
+        ret = old_img_new_index + new_img_new_index
+
+        this.updateImage(ret)
 
         
 
@@ -219,18 +228,22 @@ def posCallback(data):
     to_pts, to_pts_abs = projected_pts_to_pixel(projected_points)
 
 
-    perspective_matrix = cv2.getPerspectiveTransform(from_pts, to_pts_abs)
+    
     
     width = m.ceil(np.max(to_pts[:,0]))
     height = m.ceil(np.max(to_pts[:,1]))
-    
-    perspective_img = cv2.warpPerspective(cam_image, perspective_matrix, (IMG_WIDTH*2, IMG_HEIGHT*2))
 
-    # img_append.append(perspective_img, to_pts_abs)
-    # times.append(time.time())
+    perspective_matrix_usr = cv2.getPerspectiveTransform(from_pts, to_pts_abs)
+    perspective_img_usr = cv2.warpPerspective(cam_image, perspective_matrix_usr, (IMG_WIDTH*2, IMG_HEIGHT*2))
 
-    cv2.imshow("img", perspective_img)
-    # cv2.imwrite("img.jpg", img_append.image)
+    perspective_matrix = cv2.getPerspectiveTransform(from_pts, to_pts)
+    perspective_img = cv2.warpPerspective(cam_image, perspective_matrix, (width,height))
+
+    img_append.append(perspective_img, to_pts_abs)
+    times.append(time.time())
+
+    cv2.imshow("img", img_append.image.astype(np.uint8))
+    cv2.imwrite("img.jpg", img_append.image)
     cv2.waitKey(1)
 
     # # hue = np.array(hsv[:,:,0]).reshape((1, IMG_HEIGHT*IMG_WIDTH))
