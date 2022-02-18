@@ -1,4 +1,4 @@
-#!/usr/bin/env
+#!/usr/bin/env python3
 import rospy
 
 import std_msgs.msg
@@ -31,18 +31,68 @@ cam_pos = []
 cam_rotation = []
 cam_image = []
 
+
+
 xy_bgr_total = np.array([[],[],[],[],[]])
+
+class ImageAppend:
+    def __init__(this, width, height, step = 0.4, depth = 3):
+        this.step = step
+        this.width = width
+        this.height = height
+        this.depth = depth
+        this.image = np.zeros((height, width, depth))
+
+    def updateImage(this, new_img):
+        (img_height, img_width, img_depth) = np.shape(new_img)
+        this.width = img_width
+        this.height = img_height
+        this.depth = img_depth
+        this.image = new_img
+
+    def pixel_to_origin_coords(this, pixel_values):
+        return np.array([]).T
+    
+    def append(this, img, corner_pixel_values):
+        corner_pixel_values = np.round(corner_pixel_values).astype(np.int)
+        (img_height, img_width, _) = np.shape(img)
+        x_min_img = np.min(corner_pixel_values.T[0])
+        x_max_img = np.max(corner_pixel_values.T[0])
+        y_min_img = np.min(corner_pixel_values.T[1])
+        y_max_img = np.max(corner_pixel_values.T[1])
+        print(x_min_img, y_min_img)
+
+        new_width = max(this.width, x_max_img) - min(0, x_min_img)
+        new_height = max(this.height, y_max_img) - min(0, y_min_img)
+        new_img = np.zeros((new_height, new_width, this.depth))
+        
+        new_origin = np.array([[min(0, x_min_img), min(0, y_min_img)]], dtype=np.int)
+
+        corner_pixel_values = (corner_pixel_values.T - new_origin.T).T
+        
+        new_img[-new_origin[0][1]:this.height-new_origin[0][1],-new_origin[0][0]:this.width-new_origin[0][0]] = this.image[:,:]
+        
+        x_min_img = np.min(corner_pixel_values.T[0])
+        x_max_img = np.max(corner_pixel_values.T[0])
+        y_min_img = np.min(corner_pixel_values.T[1])
+        y_max_img = np.max(corner_pixel_values.T[1])
+
+        new_img[y_min_img:y_min_img+img_height, x_min_img:x_min_img+img_width] = img[:, :]
+
+        this.updateImage(new_img)
+
+        
+
 
 def cartesian_cross_product(x,y):
     cross_product = np.transpose([np.tile(x, len(y)),np.repeat(y,len(x))])
     return cross_product
 
-
 def calculateCamImgInitialPos(width, height, horizontal_fov):
     focal_len = width/2/m.tan(horizontal_fov/2)
-    y = np.arange(height/2, -height/2, -1)
-    x = np.arange(-width/2, width/2, 1)
-    return np.vstack([cartesian_cross_product(x, y).T, -focal_len*np.ones((width*height))])
+    y = np.array([height/2, -(height/2-1)]).T
+    x = np.array([-width/2, width/2-1]).T
+    return np.vstack([cartesian_cross_product(x, y).T, -focal_len*np.ones((4))])
 
 def project_points(camera_points, camera_position):
     xc = camera_position[0][0]
@@ -122,11 +172,34 @@ def sampleImg(xy_bgr, step=0.1):
 
     return new_img
 
+def projected_pts_to_pixel(projected_points, step=0.4):
+    # projected_points = projected_points[::-1,:]
+    
+    x_min = np.min(projected_points[0])
+    x_max = np.max(projected_points[0])
+
+    y_min = np.min(projected_points[1])
+    y_max = np.max(projected_points[1])
+    print(x_min, y_min)
+    projected_points_abs = np.copy(projected_points)
+
+    projected_points -= [[x_min], [y_max]]
+    
+    projected_points[1] = -projected_points[1]
+    projected_points_abs[1] = -projected_points_abs[1]
+
+    pixel_vals = projected_points/step
+    pixel_vals_abs = projected_points_abs/step
+    
+    pixel_vals_abs += [[IMG_WIDTH], [IMG_HEIGHT]]
+
+    return pixel_vals.astype(np.float32).T, pixel_vals_abs.astype(np.float32).T
+
 def posCallback(data):
     global times
-    times = []
     global cam_pos
     global cam_rotation
+    times = []
     pose = data.pose.pose
     point = pose.position
     quat = pose.orientation
@@ -134,65 +207,81 @@ def posCallback(data):
     cam_rotation = np.array(quaternion_rotation_matrix(np.array([[quat.w], [quat.x], [quat.y], [quat.z]]))).reshape((3,3))
     
     times.append(time.time())
-    hsv = cv2.cvtColor(cam_image, cv2.COLOR_BGR2HSV)
-    # cv2.imshow("image", cv2_image)
-    # cv2.waitKey(1)
 
     camera_points = np.matmul(cam_rotation, IMG_START_POINTS) + cam_pos
     # print(camera_points)
     projected_points = project_points(camera_points, cam_pos)
     times.append(time.time())
 
-    # hue = np.array(hsv[:,:,0]).reshape((1, IMG_HEIGHT*IMG_WIDTH))
+
+    #projected pts to pixel values
+    from_pts = np.float32([[0,0], [IMG_WIDTH-1,0], [0, IMG_HEIGHT-1], [IMG_WIDTH-1, IMG_HEIGHT-1]])
+    to_pts, to_pts_abs = projected_pts_to_pixel(projected_points)
+
+
+    perspective_matrix = cv2.getPerspectiveTransform(from_pts, to_pts_abs)
+    
+    width = m.ceil(np.max(to_pts[:,0]))
+    height = m.ceil(np.max(to_pts[:,1]))
+    
+    perspective_img = cv2.warpPerspective(cam_image, perspective_matrix, (IMG_WIDTH*2, IMG_HEIGHT*2))
+
+    # img_append.append(perspective_img, to_pts_abs)
     # times.append(time.time())
 
-    # fields = [PointField('x', 0, PointField.FLOAT32, 1),
-    #           PointField('y', 4, PointField.FLOAT32, 1),
-    #           PointField('z', 8, PointField.FLOAT32, 1),
-    #           PointField('hue', 12, PointField.FLOAT32, 1)]
-
-    # header = std_msgs.msg.Header()
-    # header.frame_id = "map"
-    # header.stamp = rospy.Time.now()
-
-    # points = np.vstack((projected_points, np.zeros((1, np.shape(projected_points)[1])), hue)).T
-
-    # pc2 = point_cloud2.create_cloud(header, fields, points[::10])
-    # pub.publish(pc2)
-    
-    # global projected_points_total
-    # global img_matrix_total
-
-    img_matrix = np.array(cam_image).reshape((IMG_HEIGHT*IMG_WIDTH, 3)).T
-    xy_bgr = np.vstack([projected_points, img_matrix])
-    if cam_pos[2] > 1:
-        global xy_bgr_total
-        xy_bgr_total = np.hstack([xy_bgr_total, xy_bgr])
-        print(np.shape(xy_bgr_total))
-    new_img = sampleImg(xy_bgr, step=0.1)
-    
-    cv2.imshow("img", new_img)
+    cv2.imshow("img", perspective_img)
+    # cv2.imwrite("img.jpg", img_append.image)
     cv2.waitKey(1)
 
-    pickle_file = "scan.pickle"
-    if np.shape(xy_bgr_total)[1] % IMG_HEIGHT*IMG_WIDTH*5 == 0:
-        with open(pickle_file, "wb") as file:
-            pickle.dump(xy_bgr_total, file)
-    print(np.shape(new_img))
+    # # hue = np.array(hsv[:,:,0]).reshape((1, IMG_HEIGHT*IMG_WIDTH))
+    # # times.append(time.time())
 
-    times.append(time.time())
+    # # fields = [PointField('x', 0, PointField.FLOAT32, 1),
+    # #           PointField('y', 4, PointField.FLOAT32, 1),
+    # #           PointField('z', 8, PointField.FLOAT32, 1),
+    # #           PointField('hue', 12, PointField.FLOAT32, 1)]
+
+    # # header = std_msgs.msg.Header()
+    # # header.frame_id = "map"
+    # # header.stamp = rospy.Time.now()
+
+    # # points = np.vstack((projected_points, np.zeros((1, np.shape(projected_points)[1])), hue)).T
+
+    # # pc2 = point_cloud2.create_cloud(header, fields, points[::10])
+    # # pub.publish(pc2)
+    
+    # # global projected_points_total
+    # # global img_matrix_total
+
+    # img_matrix = np.array(cam_image).reshape((IMG_HEIGHT*IMG_WIDTH, 3)).T
+    # xy_bgr = np.vstack([projected_points, img_matrix])
+    # if cam_pos[2] > 1:
+    #     global xy_bgr_total
+    #     xy_bgr_total = np.hstack([xy_bgr_total, xy_bgr])
+    #     print(np.shape(xy_bgr_total))
+    # new_img = sampleImg(xy_bgr, step=0.1)
+    
+    # cv2.imshow("img", new_img)
+    # cv2.waitKey(1)
+
+    # pickle_file = "scan.pickle"
+    # if np.shape(xy_bgr_total)[1] % IMG_HEIGHT*IMG_WIDTH*5 == 0:
+    #     with open(pickle_file, "wb") as file:
+    #         pickle.dump(xy_bgr_total, file)
+    # print(np.shape(new_img))
+    # times.append(time.time())
     print([times[i+1] - times[i] for i in range(len(times)-1)], times[-1]-times[0])
 
-    # fig = plt.figure()
+    # # fig = plt.figure()
 
-    # ax = fig.add_subplot(111, projection='3d')
+    # # ax = fig.add_subplot(111, projection='3d')
     
-    # ax.scatter(camera_points[0],camera_points[1],camera_points[2])
+    # # ax.scatter(camera_points[0],camera_points[1],camera_points[2])
 
-    # plt.show()
+    # # plt.show()
 
-    #<node name="webcam_viz" pkg="opencv_drone" type="webcam_viz.py"/>
-    # rospy.loginfo(cam_rotation)
+    # #<node name="webcam_viz" pkg="opencv_drone" type="webcam_viz.py"/>
+    # # rospy.loginfo(cam_rotation)
     
 def quaternion_rotation_matrix(Q):
     """
@@ -242,11 +331,15 @@ def node():
     pub = rospy.Publisher('points', PointCloud2, queue_size=10)
     global IMG_START_POINTS
 
-    rot = np.array([[0, -1, 0],
-                    [1, 0, 0],
+    rot = np.array([[0, 1, 0],
+                    [-1, 0, 0],
                     [0, 0, 1]])
+
     IMG_START_POINTS = np.matmul(rot, calculateCamImgInitialPos(IMG_WIDTH, IMG_HEIGHT, IMG_HORIZONTAL_FOV))
+    # IMG_START_POINTS = calculateCamImgInitialPos(IMG_WIDTH, IMG_HEIGHT, IMG_HORIZONTAL_FOV)
     print(IMG_START_POINTS)
+    global img_append
+    img_append = ImageAppend(IMG_WIDTH*2, IMG_HEIGHT*2)
     rospy.spin()
 
 if __name__ == "__main__":
