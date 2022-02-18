@@ -31,16 +31,17 @@ cam_pos = []
 cam_rotation = []
 cam_image = []
 
-
+step = 0.1
 
 xy_bgr_total = np.array([[],[],[],[],[]])
 
 class ImageAppend:
-    def __init__(this, width, height, step = 0.4, depth = 3):
+    def __init__(this, width, height, step = 0.2, depth = 3):
         this.step = step
         this.width = width
         this.height = height
         this.depth = depth
+        this.origin = np.array([[0, 0]], dtype=np.int)
         this.image = np.zeros((height, width, depth))
 
     def updateImage(this, new_img):
@@ -56,28 +57,34 @@ class ImageAppend:
     def append(this, img, corner_pixel_values):
         corner_pixel_values = np.round(corner_pixel_values).astype(np.int)
         (img_height, img_width, _) = np.shape(img)
+        print(corner_pixel_values.T)
         x_min_img = np.min(corner_pixel_values.T[0])
         x_max_img = np.max(corner_pixel_values.T[0])
         y_min_img = np.min(corner_pixel_values.T[1])
         y_max_img = np.max(corner_pixel_values.T[1])
 
-        new_width = max(this.width, x_max_img) - min(0, x_min_img)
-        new_height = max(this.height, y_max_img) - min(0, y_min_img)
+        new_width = max(this.width+this.origin[0][0], x_max_img+1) - min(this.origin[0][0], x_min_img)
+        new_height = max(this.height+this.origin[0][1], y_max_img+1) - min(this.origin[0][1], y_min_img)
         old_img_new_index = np.zeros((new_height, new_width, this.depth))
         new_img_new_index = np.zeros((new_height, new_width, this.depth))
         
-        new_origin = np.array([[min(0, x_min_img), min(0, y_min_img)]], dtype=np.int)
+        # old_origin = this.origin
+        # new_origin = np.array([[min(this.origin[0][0], x_min_img), min(this.origin[0][1], y_min_img)]], dtype=np.int)
+        # this.origin = new_origin
+        old_origin = np.copy(this.origin)
+        this.origin = np.array([[min(this.origin[0][0], x_min_img), min(this.origin[0][1], y_min_img)]], dtype=np.int)
 
-        corner_pixel_values = (corner_pixel_values.T - new_origin.T).T
+        offset = this.origin
+        offset_old = this.origin-old_origin
         
-        old_img_new_index[-new_origin[0][1]:this.height-new_origin[0][1],-new_origin[0][0]:this.width-new_origin[0][0]] = this.image[:,:]
-        new_img_new_indexold_img_new_index = old_img_new_index.astype(np.float32)
+        old_img_new_index[-offset_old[0][1]:this.height-offset_old[0][1],-offset_old[0][0]:this.width-offset_old[0][0]] = this.image[:,:]
+        old_img_new_index = old_img_new_index.astype(np.float32)
         x_min_img = np.min(corner_pixel_values.T[0])
         x_max_img = np.max(corner_pixel_values.T[0])
         y_min_img = np.min(corner_pixel_values.T[1])
         y_max_img = np.max(corner_pixel_values.T[1])
 
-        new_img_new_index[y_min_img:y_min_img+img_height, x_min_img:x_min_img+img_width] = img[:, :]
+        new_img_new_index[y_min_img-this.origin[0][1]:y_min_img+img_height-this.origin[0][1], x_min_img-this.origin[0][0]:x_min_img+img_width-this.origin[0][0]] = img[:, :]
         new_img_new_index = new_img_new_index.astype(np.float32)
 
         new_img_new_index_gray = cv2.cvtColor(new_img_new_index, cv2.COLOR_BGR2GRAY)
@@ -181,7 +188,7 @@ def sampleImg(xy_bgr, step=0.1):
 
     return new_img
 
-def projected_pts_to_pixel(projected_points, step=0.4):
+def projected_pts_to_pixel(projected_points, step=0.2):
     # projected_points = projected_points[::-1,:]
     
     x_min = np.min(projected_points[0])
@@ -200,7 +207,7 @@ def projected_pts_to_pixel(projected_points, step=0.4):
     pixel_vals = projected_points/step
     pixel_vals_abs = projected_points_abs/step
     
-    pixel_vals_abs += [[IMG_WIDTH], [IMG_HEIGHT]]
+    # pixel_vals_abs += [[IMG_WIDTH], [IMG_HEIGHT]]
 
     return pixel_vals.astype(np.float32).T, pixel_vals_abs.astype(np.float32).T
 
@@ -225,7 +232,7 @@ def posCallback(data):
 
     #projected pts to pixel values
     from_pts = np.float32([[0,0], [IMG_WIDTH-1,0], [0, IMG_HEIGHT-1], [IMG_WIDTH-1, IMG_HEIGHT-1]])
-    to_pts, to_pts_abs = projected_pts_to_pixel(projected_points)
+    to_pts, to_pts_abs = projected_pts_to_pixel(projected_points, step=step)
 
 
     
@@ -242,7 +249,7 @@ def posCallback(data):
     img_append.append(perspective_img, to_pts_abs)
     times.append(time.time())
 
-    cv2.imshow("img", img_append.image.astype(np.uint8))
+    # cv2.imshow("img", img_append.image.astype(np.uint8))
     cv2.imwrite("img.jpg", img_append.image)
     cv2.waitKey(1)
 
@@ -352,7 +359,7 @@ def node():
     # IMG_START_POINTS = calculateCamImgInitialPos(IMG_WIDTH, IMG_HEIGHT, IMG_HORIZONTAL_FOV)
     print(IMG_START_POINTS)
     global img_append
-    img_append = ImageAppend(IMG_WIDTH*2, IMG_HEIGHT*2)
+    img_append = ImageAppend(IMG_WIDTH//2, IMG_HEIGHT//2, step=step)
     rospy.spin()
 
 if __name__ == "__main__":
