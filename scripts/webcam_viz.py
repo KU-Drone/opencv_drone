@@ -41,7 +41,7 @@ class ImageAppend:
         this.width = width
         this.height = height
         this.depth = depth
-        this.origin = np.array([[0, 0]], dtype=np.int)
+        this.origin = np.array([[0, 0]], dtype=np.int)  
         this.image = np.zeros((height, width, depth))
 
     def updateImage(this, new_img):
@@ -53,46 +53,82 @@ class ImageAppend:
 
     def pixel_to_origin_coords(this, pixel_values):
         return np.array([]).T
+    def projected_pts_to_pixel(this, projected_points):
+        # projected_points = projected_points[::-1,:]
+        
+        x_min = np.min(projected_points[0])
+        x_max = np.max(projected_points[0])
+        y_min = np.min(projected_points[1])
+        y_max = np.max(projected_points[1])
+
+        print(x_min, y_min)
+        projected_points_abs = np.copy(projected_points)
+
+        projected_points -= [[x_min], [y_max]]
+        
+        projected_points[1] = -projected_points[1]
+        projected_points_abs[1] = -projected_points_abs[1]
+
+        pixel_vals = projected_points/this.step
+        pixel_vals_abs = projected_points_abs/this.step
+
+        return pixel_vals.astype(np.float32).T, pixel_vals_abs.astype(np.float32).T
     
+    def local_meter_to_local_pixel_coords(this, local_meter_coords):
+        local_meter_coords_temp = np.copy(local_meter_coords)
+
+        local_meter_coords_temp[1] = -local_meter_coords_temp[1]
+
+        local_pixel_coords = local_meter_coords_temp/this.step
+
+        return local_pixel_coords.astype(np.float32)
+
     def append(this, img, corner_pixel_values):
+        #round the coordinates of the corners which are in home center pixel coordinate frame
         corner_pixel_values = np.round(corner_pixel_values).astype(np.int)
         (img_height, img_width, _) = np.shape(img)
-        print(corner_pixel_values.T)
+        
+        #get boundaries of the image to add
         x_min_img = np.min(corner_pixel_values.T[0])
         x_max_img = np.max(corner_pixel_values.T[0])
         y_min_img = np.min(corner_pixel_values.T[1])
         y_max_img = np.max(corner_pixel_values.T[1])
 
+        #set the image width to span from the lowest x to the highest. Same with the height
         new_width = max(this.width+this.origin[0][0], x_max_img+1) - min(this.origin[0][0], x_min_img)
         new_height = max(this.height+this.origin[0][1], y_max_img+1) - min(this.origin[0][1], y_min_img)
+
+        #initialise empty images to copy the current image and the new image into. These are in the form of the updated image pixel coordinates. 
         old_img_new_index = np.zeros((new_height, new_width, this.depth))
         new_img_new_index = np.zeros((new_height, new_width, this.depth))
         
-        # old_origin = this.origin
-        # new_origin = np.array([[min(this.origin[0][0], x_min_img), min(this.origin[0][1], y_min_img)]], dtype=np.int)
-        # this.origin = new_origin
+        #save the old origin
         old_origin = np.copy(this.origin)
+        #new origin coordinates are the lower of the x and y values of old origin and top right corner of image to stitch
         this.origin = np.array([[min(this.origin[0][0], x_min_img), min(this.origin[0][1], y_min_img)]], dtype=np.int)
 
+        #how much to offset new image
         offset = this.origin
+        #how much to offset old image
         offset_old = this.origin-old_origin
         
+        #copy every pixel from old image into the empty old_img_new_index picture which has its origin at the new origin
         old_img_new_index[-offset_old[0][1]:this.height-offset_old[0][1],-offset_old[0][0]:this.width-offset_old[0][0]] = this.image[:,:]
-        old_img_new_index = old_img_new_index.astype(np.float32)
-        x_min_img = np.min(corner_pixel_values.T[0])
-        x_max_img = np.max(corner_pixel_values.T[0])
-        y_min_img = np.min(corner_pixel_values.T[1])
-        y_max_img = np.max(corner_pixel_values.T[1])
+        old_img_new_index = old_img_new_index.astype(np.float32)#needed for opencv for some reason
 
+        #copy every pixel of new image into the empty new_img_new_index picture which has its origin at the new origin
         new_img_new_index[y_min_img-this.origin[0][1]:y_min_img+img_height-this.origin[0][1], x_min_img-this.origin[0][0]:x_min_img+img_width-this.origin[0][0]] = img[:, :]
-        new_img_new_index = new_img_new_index.astype(np.float32)
+        new_img_new_index = new_img_new_index.astype(np.float32)#needed for opencv for some reason
 
+        #create a mask to black out the region where the new image will fit in the old image
         new_img_new_index_gray = cv2.cvtColor(new_img_new_index, cv2.COLOR_BGR2GRAY)
         ret, mask = cv2.threshold(new_img_new_index_gray, 1, 255, cv2.THRESH_BINARY)
         mask_inv = cv2.bitwise_not(mask.astype(np.uint8))
 
+        #black out area where the new image will fit in the old image
         old_img_new_index = cv2.bitwise_and(old_img_new_index, old_img_new_index, mask=mask_inv.astype(np.uint8))
-
+        
+        #stitch images
         ret = old_img_new_index + new_img_new_index
 
         this.updateImage(ret)
@@ -188,28 +224,6 @@ def sampleImg(xy_bgr, step=0.1):
 
     return new_img
 
-def projected_pts_to_pixel(projected_points, step=0.2):
-    # projected_points = projected_points[::-1,:]
-    
-    x_min = np.min(projected_points[0])
-    x_max = np.max(projected_points[0])
-
-    y_min = np.min(projected_points[1])
-    y_max = np.max(projected_points[1])
-    print(x_min, y_min)
-    projected_points_abs = np.copy(projected_points)
-
-    projected_points -= [[x_min], [y_max]]
-    
-    projected_points[1] = -projected_points[1]
-    projected_points_abs[1] = -projected_points_abs[1]
-
-    pixel_vals = projected_points/step
-    pixel_vals_abs = projected_points_abs/step
-    
-    # pixel_vals_abs += [[IMG_WIDTH], [IMG_HEIGHT]]
-
-    return pixel_vals.astype(np.float32).T, pixel_vals_abs.astype(np.float32).T
 
 def posCallback(data):
     global times
@@ -232,76 +246,37 @@ def posCallback(data):
 
     #projected pts to pixel values
     from_pts = np.float32([[0,0], [IMG_WIDTH-1,0], [0, IMG_HEIGHT-1], [IMG_WIDTH-1, IMG_HEIGHT-1]])
-    to_pts, to_pts_abs = projected_pts_to_pixel(projected_points, step=step)
 
+    # to_pts, to_pts_abs = img_append.projected_pts_to_pixel(projected_points)
+    # width = m.ceil(np.max(to_pts[:,0]))
+    # height = m.ceil(np.max(to_pts[:,1]))
+    # perspective_matrix = cv2.getPerspectiveTransform(from_pts, to_pts)
+    # perspective_img = cv2.warpPerspective(cam_image, perspective_matrix, (width,height))
+    # print(to_pts_abs)
+    # img_append.append(perspective_img, to_pts_abs)
 
-    
-    
+    to_pts_abs = img_append.local_meter_to_local_pixel_coords(projected_points)
+    x_min = np.min(to_pts_abs[0])
+    x_max = np.max(to_pts_abs[0])
+    y_min = np.min(to_pts_abs[1])
+    y_max = np.max(to_pts_abs[1])
+    to_pts = (to_pts_abs - [[x_min], [y_min]]).T
     width = m.ceil(np.max(to_pts[:,0]))
     height = m.ceil(np.max(to_pts[:,1]))
-
-    perspective_matrix_usr = cv2.getPerspectiveTransform(from_pts, to_pts_abs)
-    perspective_img_usr = cv2.warpPerspective(cam_image, perspective_matrix_usr, (IMG_WIDTH*2, IMG_HEIGHT*2))
-
     perspective_matrix = cv2.getPerspectiveTransform(from_pts, to_pts)
     perspective_img = cv2.warpPerspective(cam_image, perspective_matrix, (width,height))
+    img_append.append(perspective_img, to_pts_abs.T)
 
-    img_append.append(perspective_img, to_pts_abs)
+
+
     times.append(time.time())
 
     # cv2.imshow("img", img_append.image.astype(np.uint8))
     cv2.imwrite("img.jpg", img_append.image)
     cv2.waitKey(1)
 
-    # # hue = np.array(hsv[:,:,0]).reshape((1, IMG_HEIGHT*IMG_WIDTH))
-    # # times.append(time.time())
-
-    # # fields = [PointField('x', 0, PointField.FLOAT32, 1),
-    # #           PointField('y', 4, PointField.FLOAT32, 1),
-    # #           PointField('z', 8, PointField.FLOAT32, 1),
-    # #           PointField('hue', 12, PointField.FLOAT32, 1)]
-
-    # # header = std_msgs.msg.Header()
-    # # header.frame_id = "map"
-    # # header.stamp = rospy.Time.now()
-
-    # # points = np.vstack((projected_points, np.zeros((1, np.shape(projected_points)[1])), hue)).T
-
-    # # pc2 = point_cloud2.create_cloud(header, fields, points[::10])
-    # # pub.publish(pc2)
-    
-    # # global projected_points_total
-    # # global img_matrix_total
-
-    # img_matrix = np.array(cam_image).reshape((IMG_HEIGHT*IMG_WIDTH, 3)).T
-    # xy_bgr = np.vstack([projected_points, img_matrix])
-    # if cam_pos[2] > 1:
-    #     global xy_bgr_total
-    #     xy_bgr_total = np.hstack([xy_bgr_total, xy_bgr])
-    #     print(np.shape(xy_bgr_total))
-    # new_img = sampleImg(xy_bgr, step=0.1)
-    
-    # cv2.imshow("img", new_img)
-    # cv2.waitKey(1)
-
-    # pickle_file = "scan.pickle"
-    # if np.shape(xy_bgr_total)[1] % IMG_HEIGHT*IMG_WIDTH*5 == 0:
-    #     with open(pickle_file, "wb") as file:
-    #         pickle.dump(xy_bgr_total, file)
-    # print(np.shape(new_img))
-    # times.append(time.time())
     print([times[i+1] - times[i] for i in range(len(times)-1)], times[-1]-times[0])
 
-    # # fig = plt.figure()
-
-    # # ax = fig.add_subplot(111, projection='3d')
-    
-    # # ax.scatter(camera_points[0],camera_points[1],camera_points[2])
-
-    # # plt.show()
-
-    # #<node name="webcam_viz" pkg="opencv_drone" type="webcam_viz.py"/>
-    # # rospy.loginfo(cam_rotation)
     
 def quaternion_rotation_matrix(Q):
     """

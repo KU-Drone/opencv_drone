@@ -1,1 +1,2 @@
-projected_pts_to_pixel
+
+    height = m.ceil(np.max(to_pts[:,1]))
