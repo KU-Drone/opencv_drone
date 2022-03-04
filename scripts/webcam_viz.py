@@ -53,27 +53,7 @@ class ImageAppend:
 
     def pixel_to_origin_coords(this, pixel_values):
         return np.array([]).T
-    def projected_pts_to_pixel(this, projected_points):
-        # projected_points = projected_points[::-1,:]
-        
-        x_min = np.min(projected_points[0])
-        x_max = np.max(projected_points[0])
-        y_min = np.min(projected_points[1])
-        y_max = np.max(projected_points[1])
 
-        print(x_min, y_min)
-        projected_points_abs = np.copy(projected_points)
-
-        projected_points -= [[x_min], [y_max]]
-        
-        projected_points[1] = -projected_points[1]
-        projected_points_abs[1] = -projected_points_abs[1]
-
-        pixel_vals = projected_points/this.step
-        pixel_vals_abs = projected_points_abs/this.step
-
-        return pixel_vals.astype(np.float32).T, pixel_vals_abs.astype(np.float32).T
-    
     def local_meter_to_local_pixel_coords(this, local_meter_coords):
         local_meter_coords_temp = np.copy(local_meter_coords)
 
@@ -128,6 +108,63 @@ class ImageAppend:
         #black out area where the new image will fit in the old image
         old_img_new_index = cv2.bitwise_and(old_img_new_index, old_img_new_index, mask=mask_inv.astype(np.uint8))
         
+        #stitch images
+        ret = old_img_new_index + new_img_new_index
+
+        this.updateImage(ret)
+
+    def project(this, img, projected_points):
+        to_pts_abs = img_append.local_meter_to_local_pixel_coords(projected_points)
+        corner_pixel_values = to_pts_abs.T
+        #round the coordinates of the corners which are in home center pixel coordinate frame
+        corner_pixel_values = np.round(corner_pixel_values).astype(np.int)
+        (img_height, img_width, _) = np.shape(img)
+        
+        #get boundaries of the image to add
+        x_min_img = np.min(corner_pixel_values.T[0])
+        x_max_img = np.max(corner_pixel_values.T[0])
+        y_min_img = np.min(corner_pixel_values.T[1])
+        y_max_img = np.max(corner_pixel_values.T[1])
+
+        #set the image width to span from the lowest x to the highest. Same with the height
+        new_width = max(this.width+this.origin[0][0], x_max_img+1) - min(this.origin[0][0], x_min_img)
+        new_height = max(this.height+this.origin[0][1], y_max_img+1) - min(this.origin[0][1], y_min_img)
+
+        #initialise empty images to copy the current image and the new image into. These are in the form of the updated image pixel coordinates. 
+        old_img_new_index = np.zeros((new_height, new_width, this.depth))
+        new_img_new_index = np.zeros((new_height, new_width, this.depth))
+        
+        #save the old origin
+        old_origin = np.copy(this.origin)
+        #new origin coordinates are the lower of the x and y values of old origin and top right corner of image to stitch
+        this.origin = np.array([[min(this.origin[0][0], x_min_img), min(this.origin[0][1], y_min_img)]], dtype=np.int)
+
+        #how much to offset new image
+        offset = this.origin
+        #how much to offset old image
+        offset_old = this.origin-old_origin
+
+        #copy every pixel from old image into the empty old_img_new_index picture which has its origin at the new origin
+        old_img_new_index[-offset_old[0][1]:this.height-offset_old[0][1],-offset_old[0][0]:this.width-offset_old[0][0]] = this.image[:,:]
+        old_img_new_index = old_img_new_index.astype(np.float32)#needed for opencv for some reason
+
+        #corners of the input image
+        from_pts = np.float32([[0,0], [IMG_WIDTH-1,0], [0, IMG_HEIGHT-1], [IMG_WIDTH-1, IMG_HEIGHT-1]])
+        #where the corners go (in pixel coordinates)
+        to_pts = ((corner_pixel_values.T - this.origin.T).T).astype(np.float32)
+
+        #project the image. the coordinate space is the same as old_img_new_index
+        perspective_matrix = cv2.getPerspectiveTransform(from_pts, to_pts)
+        new_img_new_index = cv2.warpPerspective(cam_image, perspective_matrix, (new_width,new_height))
+
+        #create a mask to black out the region where the new image will fit in the old image
+        new_img_new_index_gray = cv2.cvtColor(new_img_new_index, cv2.COLOR_BGR2GRAY)
+        ret, mask = cv2.threshold(new_img_new_index_gray, 1, 255, cv2.THRESH_BINARY)
+        mask_inv = cv2.bitwise_not(mask.astype(np.uint8))
+
+        #black out area where the new image will fit in the old image
+        old_img_new_index = cv2.bitwise_and(old_img_new_index, old_img_new_index, mask=mask_inv.astype(np.uint8))
+
         #stitch images
         ret = old_img_new_index + new_img_new_index
 
@@ -239,35 +276,11 @@ def posCallback(data):
     times.append(time.time())
 
     camera_points = np.matmul(cam_rotation, IMG_START_POINTS) + cam_pos
-    # print(camera_points)
+    
     projected_points = project_points(camera_points, cam_pos)
+    
     times.append(time.time())
-
-
-    #projected pts to pixel values
-    from_pts = np.float32([[0,0], [IMG_WIDTH-1,0], [0, IMG_HEIGHT-1], [IMG_WIDTH-1, IMG_HEIGHT-1]])
-
-    # to_pts, to_pts_abs = img_append.projected_pts_to_pixel(projected_points)
-    # width = m.ceil(np.max(to_pts[:,0]))
-    # height = m.ceil(np.max(to_pts[:,1]))
-    # perspective_matrix = cv2.getPerspectiveTransform(from_pts, to_pts)
-    # perspective_img = cv2.warpPerspective(cam_image, perspective_matrix, (width,height))
-    # print(to_pts_abs)
-    # img_append.append(perspective_img, to_pts_abs)
-
-    to_pts_abs = img_append.local_meter_to_local_pixel_coords(projected_points)
-    x_min = np.min(to_pts_abs[0])
-    x_max = np.max(to_pts_abs[0])
-    y_min = np.min(to_pts_abs[1])
-    y_max = np.max(to_pts_abs[1])
-    to_pts = (to_pts_abs - [[x_min], [y_min]]).T
-    width = m.ceil(np.max(to_pts[:,0]))
-    height = m.ceil(np.max(to_pts[:,1]))
-    perspective_matrix = cv2.getPerspectiveTransform(from_pts, to_pts)
-    perspective_img = cv2.warpPerspective(cam_image, perspective_matrix, (width,height))
-    img_append.append(perspective_img, to_pts_abs.T)
-
-
+    img_append.project(cam_image, projected_points)
 
     times.append(time.time())
 
@@ -275,7 +288,7 @@ def posCallback(data):
     cv2.imwrite("img.jpg", img_append.image)
     cv2.waitKey(1)
 
-    print([times[i+1] - times[i] for i in range(len(times)-1)], times[-1]-times[0])
+    print([(times[i+1] - times[i])/(times[-1]-times[0])*100 for i in range(len(times)-1)], 1/(times[-1]-times[0]))
 
     
 def quaternion_rotation_matrix(Q):
