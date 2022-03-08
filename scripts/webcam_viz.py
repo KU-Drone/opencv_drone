@@ -63,56 +63,6 @@ class ImageAppend:
 
         return local_pixel_coords.astype(np.float32)
 
-    def append(this, img, corner_pixel_values):
-        #round the coordinates of the corners which are in home center pixel coordinate frame
-        corner_pixel_values = np.round(corner_pixel_values).astype(np.int)
-        (img_height, img_width, _) = np.shape(img)
-        
-        #get boundaries of the image to add
-        x_min_img = np.min(corner_pixel_values.T[0])
-        x_max_img = np.max(corner_pixel_values.T[0])
-        y_min_img = np.min(corner_pixel_values.T[1])
-        y_max_img = np.max(corner_pixel_values.T[1])
-
-        #set the image width to span from the lowest x to the highest. Same with the height
-        new_width = max(this.width+this.origin[0][0], x_max_img+1) - min(this.origin[0][0], x_min_img)
-        new_height = max(this.height+this.origin[0][1], y_max_img+1) - min(this.origin[0][1], y_min_img)
-
-        #initialise empty images to copy the current image and the new image into. These are in the form of the updated image pixel coordinates. 
-        old_img_new_index = np.zeros((new_height, new_width, this.depth))
-        new_img_new_index = np.zeros((new_height, new_width, this.depth))
-        
-        #save the old origin
-        old_origin = np.copy(this.origin)
-        #new origin coordinates are the lower of the x and y values of old origin and top right corner of image to stitch
-        this.origin = np.array([[min(this.origin[0][0], x_min_img), min(this.origin[0][1], y_min_img)]], dtype=np.int)
-
-        #how much to offset new image
-        offset = this.origin
-        #how much to offset old image
-        offset_old = this.origin-old_origin
-        
-        #copy every pixel from old image into the empty old_img_new_index picture which has its origin at the new origin
-        old_img_new_index[-offset_old[0][1]:this.height-offset_old[0][1],-offset_old[0][0]:this.width-offset_old[0][0]] = this.image[:,:]
-        old_img_new_index = old_img_new_index.astype(np.float32)#needed for opencv for some reason
-
-        #copy every pixel of new image into the empty new_img_new_index picture which has its origin at the new origin
-        new_img_new_index[y_min_img-this.origin[0][1]:y_min_img+img_height-this.origin[0][1], x_min_img-this.origin[0][0]:x_min_img+img_width-this.origin[0][0]] = img[:, :]
-        new_img_new_index = new_img_new_index.astype(np.float32)#needed for opencv for some reason
-
-        #create a mask to black out the region where the new image will fit in the old image
-        new_img_new_index_gray = cv2.cvtColor(new_img_new_index, cv2.COLOR_BGR2GRAY)
-        ret, mask = cv2.threshold(new_img_new_index_gray, 1, 255, cv2.THRESH_BINARY)
-        mask_inv = cv2.bitwise_not(mask.astype(np.uint8))
-
-        #black out area where the new image will fit in the old image
-        old_img_new_index = cv2.bitwise_and(old_img_new_index, old_img_new_index, mask=mask_inv.astype(np.uint8))
-        
-        #stitch images
-        ret = old_img_new_index + new_img_new_index
-
-        this.updateImage(ret)
-
     def project(this, img, projected_points):
         to_pts_abs = img_append.local_meter_to_local_pixel_coords(projected_points)
         corner_pixel_values = to_pts_abs.T
@@ -202,64 +152,6 @@ def imgCallback(data):
     bridge = CvBridge()
     cam_image = bridge.imgmsg_to_cv2(data, desired_encoding="bgr8")
 
-def sampleImg(xy_bgr, step=0.1):
-
-    projected_pts = xy_bgr[0:2]
-    img_matrix = xy_bgr[2:5]
-    x_min = np.min(projected_pts[0])
-    x_max = np.max(projected_pts[0])
-
-    y_min = np.min(projected_pts[1])
-    y_max = np.max(projected_pts[1])
-    
-    y = np.arange(y_min, y_max, step)
-    x = np.arange(x_min, x_max, step)
-    query_pts = cartesian_cross_product(x, y)
-
-    height = np.shape(y)[0]
-    width = np.shape(x)[0]
-
-    #k-d tree (slightly less than 4 hz)
-    # tree = KDTree(projected_pts.T)
-    # dist, ind = tree.query(query_pts, k=1)
-    # b = np.take_along_axis(img_matrix[:,0], ind[:,0], 0).reshape((1, height*width))
-    # g = np.take_along_axis(img_matrix[:,1], ind[:,0], 0).reshape((1, height*width))
-    # r = np.take_along_axis(img_matrix[:,2], ind[:,0], 0).reshape((1, height*width))
-    # new_img = np.vstack([b, g, r]).T.reshape((height, width, 3))
-
-    #scipy.interpolate.griddata (less than 1 hz)
-    # method = "nearest"
-    # b = griddata(projected_pts.T, img_matrix[:,0], query_pts, method=method)
-    # g = griddata(projected_pts.T, img_matrix[:,1], query_pts, method=method)
-    # r = griddata(projected_pts.T, img_matrix[:,2], query_pts, method=method)
-    # new_img = np.vstack([b, g, r]).T.reshape((height, width, 3))
-
-    x_range = x_max-x_min
-    y_range = y_max-y_min
-    new_img = np.zeros((height, width, 3), dtype=np.uint8)
-
-    projected_pts = np.around(projected_pts/step)*step
-
-    projected_pts_ind_x = (projected_pts[0]-x_min)/x_range*width
-    projected_pts_ind_y = (projected_pts[1]-y_min)/y_range*height
-
-    projected_pts_ind_x[projected_pts_ind_x<0] = 0
-    projected_pts_ind_x[projected_pts_ind_x>width-1] = width-1
-
-    projected_pts_ind_y[projected_pts_ind_y<0] = 0
-    projected_pts_ind_y[projected_pts_ind_y>height-1] = height-1
-
-    projected_pts_ind = np.vstack([projected_pts_ind_x, projected_pts_ind_y]).astype(int)
-    # projected_pts_ind = (projected_pts_ind_x + projected_pts_ind_y*height).astype(int)
-
-    # new_img = np.take_along_axis(img_matrix, projected_pts_ind.T, axis=0)
-    
-    # projected_pts_ind.h
-
-    new_img[projected_pts_ind.T[:, 1], projected_pts_ind.T[:, 0]] = img_matrix.T
-    new_img = new_img.reshape((height, width, 3))
-
-    return new_img
 
 
 def posCallback(data):
@@ -284,9 +176,7 @@ def posCallback(data):
 
     times.append(time.time())
 
-    # cv2.imshow("img", img_append.image.astype(np.uint8))
-    cv2.imwrite("img.jpg", img_append.image)
-    cv2.waitKey(1)
+    cv2.imwrite("/home/batu/projects/autonomous_drone/catkin_ws/src/opencv_drone/img.jpg", img_append.image)
 
     print([(times[i+1] - times[i])/(times[-1]-times[0])*100 for i in range(len(times)-1)], 1/(times[-1]-times[0]))
 
