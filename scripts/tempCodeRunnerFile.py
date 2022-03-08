@@ -1,1 +1,1 @@
-img_append
+corner_pixel_values

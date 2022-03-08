@@ -51,8 +51,8 @@ class ImageAppend:
         this.depth = img_depth
         this.image = new_img
 
-    def pixel_to_origin_coords(this, pixel_values):
-        return np.array([]).T
+    # def pixel_to_origin_coords(this, pixel_values):
+    #     return np.array([]).T
 
     def local_meter_to_local_pixel_coords(this, local_meter_coords):
         local_meter_coords_temp = np.copy(local_meter_coords)
@@ -116,6 +116,7 @@ class ImageAppend:
     def project(this, img, projected_points):
         to_pts_abs = img_append.local_meter_to_local_pixel_coords(projected_points)
         corner_pixel_values = to_pts_abs.T
+
         #round the coordinates of the corners which are in home center pixel coordinate frame
         corner_pixel_values = np.round(corner_pixel_values).astype(np.int)
         (img_height, img_width, _) = np.shape(img)
@@ -130,13 +131,12 @@ class ImageAppend:
         new_width = max(this.width+this.origin[0][0], x_max_img+1) - min(this.origin[0][0], x_min_img)
         new_height = max(this.height+this.origin[0][1], y_max_img+1) - min(this.origin[0][1], y_min_img)
 
-        #initialise empty images to copy the current image and the new image into. These are in the form of the updated image pixel coordinates. 
+        #initialise empty image to copy the current image into. These are in the form of the updated image pixel coordinates. 
         old_img_new_index = np.zeros((new_height, new_width, this.depth))
-        new_img_new_index = np.zeros((new_height, new_width, this.depth))
         
         #save the old origin
         old_origin = np.copy(this.origin)
-        #new origin coordinates are the lower of the x and y values of old origin and top right corner of image to stitch
+        #new origin coordinates are the lower of the x and y values of old origin and top left corner of image to stitch
         this.origin = np.array([[min(this.origin[0][0], x_min_img), min(this.origin[0][1], y_min_img)]], dtype=np.int)
 
         #how much to offset new image
@@ -149,13 +149,16 @@ class ImageAppend:
         old_img_new_index = old_img_new_index.astype(np.float32)#needed for opencv for some reason
 
         #corners of the input image
-        from_pts = np.float32([[0,0], [IMG_WIDTH-1,0], [0, IMG_HEIGHT-1], [IMG_WIDTH-1, IMG_HEIGHT-1]])
+        from_pts = np.float32([[0,0], [img_width-1,0], [0, img_height-1], [img_width-1, img_height-1]])
         #where the corners go (in pixel coordinates)
         to_pts = ((corner_pixel_values.T - this.origin.T).T).astype(np.float32)
 
-        #project the image. the coordinate space is the same as old_img_new_index
-        perspective_matrix = cv2.getPerspectiveTransform(from_pts, to_pts)
-        new_img_new_index = cv2.warpPerspective(cam_image, perspective_matrix, (new_width,new_height))
+        if not x_max_img == x_min_img and not y_max_img == y_min_img:
+            #project the image only if the pixel values arent the same. the coordinate space is the same as old_img_new_index
+            perspective_matrix = cv2.getPerspectiveTransform(from_pts, to_pts)
+            new_img_new_index = cv2.warpPerspective(img, perspective_matrix, (new_width,new_height))
+        else:
+            new_img_new_index = np.zeros((new_height, new_width, this.depth)).astype(np.float32)
 
         #create a mask to black out the region where the new image will fit in the old image
         new_img_new_index_gray = cv2.cvtColor(new_img_new_index, cv2.COLOR_BGR2GRAY)
@@ -170,17 +173,14 @@ class ImageAppend:
 
         this.updateImage(ret)
 
-        
-
-
 def cartesian_cross_product(x,y):
     cross_product = np.transpose([np.tile(x, len(y)),np.repeat(y,len(x))])
     return cross_product
 
 def calculateCamImgInitialPos(width, height, horizontal_fov):
     focal_len = width/2/m.tan(horizontal_fov/2)
-    y = np.array([height/2, -(height/2-1)]).T
-    x = np.array([-width/2, width/2-1]).T
+    y = np.array([height/2, -(height/2)]).T
+    x = np.array([-width/2, width/2]).T
     return np.vstack([cartesian_cross_product(x, y).T, -focal_len*np.ones((4))])
 
 def project_points(camera_points, camera_position):
@@ -344,7 +344,7 @@ def node():
                     [0, 0, 1]])
 
     IMG_START_POINTS = np.matmul(rot, calculateCamImgInitialPos(IMG_WIDTH, IMG_HEIGHT, IMG_HORIZONTAL_FOV))
-    # IMG_START_POINTS = calculateCamImgInitialPos(IMG_WIDTH, IMG_HEIGHT, IMG_HORIZONTAL_FOV)
+
     print(IMG_START_POINTS)
     global img_append
     img_append = ImageAppend(IMG_WIDTH//2, IMG_HEIGHT//2, step=step)
