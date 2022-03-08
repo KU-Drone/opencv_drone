@@ -3,24 +3,16 @@ import rospy
 
 import std_msgs.msg
 import sensor_msgs.msg
-from sensor_msgs import point_cloud2  
 from sensor_msgs.msg import Image
-from sensor_msgs.msg import PointField
 from nav_msgs.msg import Odometry
 from cv_bridge import CvBridge
-from sensor_msgs.msg import PointCloud2
 
 import cv2
 import numpy as np
 import math as m
-import matplotlib.pyplot as plt
-from sklearn.neighbors import KDTree
-from scipy.interpolate import griddata
-
-from mpl_toolkits.mplot3d import Axes3D
 
 import time
-import pickle
+import sys
 
 IMG_WIDTH = 640
 IMG_HEIGHT = 480
@@ -33,7 +25,7 @@ cam_image = []
 
 step = 0.1
 
-xy_bgr_total = np.array([[],[],[],[],[]])
+img_path = "img.jpg"
 
 class ImageAppend:
     def __init__(this, width, height, step = 0.2, depth = 3):
@@ -152,8 +144,6 @@ def imgCallback(data):
     bridge = CvBridge()
     cam_image = bridge.imgmsg_to_cv2(data, desired_encoding="bgr8")
 
-
-
 def posCallback(data):
     global times
     global cam_pos
@@ -176,10 +166,9 @@ def posCallback(data):
 
     times.append(time.time())
 
-    cv2.imwrite("/home/batu/projects/autonomous_drone/catkin_ws/src/opencv_drone/img.jpg", img_append.image)
+    cv2.imwrite(img_path, img_append.image)
 
     print([(times[i+1] - times[i])/(times[-1]-times[0])*100 for i in range(len(times)-1)], 1/(times[-1]-times[0]))
-
     
 def quaternion_rotation_matrix(Q):
     """
@@ -225,9 +214,9 @@ def node():
     rospy.init_node("webcam_viz", anonymous=False)
     rospy.Subscriber("/webcam/image_raw", Image, imgCallback)
     rospy.Subscriber("/mavros/global_position/local", Odometry, posCallback)
-    global pub
-    pub = rospy.Publisher('points', PointCloud2, queue_size=10)
     global IMG_START_POINTS
+    global img_append
+    global img_path
 
     rot = np.array([[0, 1, 0],
                     [-1, 0, 0],
@@ -236,8 +225,10 @@ def node():
     IMG_START_POINTS = np.matmul(rot, calculateCamImgInitialPos(IMG_WIDTH, IMG_HEIGHT, IMG_HORIZONTAL_FOV))
 
     print(IMG_START_POINTS)
-    global img_append
+    
     img_append = ImageAppend(IMG_WIDTH//2, IMG_HEIGHT//2, step=step)
+    if len(sys.argv) >= 2:
+        img_path = sys.argv[1]
     rospy.spin()
 
 if __name__ == "__main__":

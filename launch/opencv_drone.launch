@@ -3,5 +3,6 @@
     <node name="sitl" pkg="iq_sim" type="startsitl.sh"/>
     <include file="$(find iq_sim)/launch/apm.launch" output="log"/>
     
-    <node name="webcam_viz" pkg="opencv_drone" type="webcam_viz.py" output="screen" launch-prefix="xterm -e"/>
+    <node name="webcam_viz" pkg="opencv_drone" type="webcam_viz.py" args= "$(find opencv_drone)/img.jpg" output="screen" launch-prefix="xterm -e"/>
+    
 </launch>

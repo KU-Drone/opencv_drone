@@ -1,1 +1,1 @@
-corner_pixel_values
+img_path
