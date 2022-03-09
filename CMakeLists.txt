@@ -109,7 +109,7 @@ catkin_package(
 #  DEPENDS system_lib
 )
 
-catkin_install_python(PROGRAMS scripts/webcam_viz.py
+catkin_install_python(PROGRAMS scripts/vision.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

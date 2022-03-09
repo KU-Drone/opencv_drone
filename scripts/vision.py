@@ -33,7 +33,7 @@ class ImageAppend:
         this.width = width
         this.height = height
         this.depth = depth
-        this.origin = np.array([[0, 0]], dtype=np.int)  
+        this.map_corner_coords = np.array([[0, 0]], dtype=np.int)  #coordinates of where the map top left corner is in local pixel coordinate frame
         this.image = np.zeros((height, width, depth))
 
     def updateImage(this, new_img):
@@ -70,30 +70,30 @@ class ImageAppend:
         y_max_img = np.max(corner_pixel_values.T[1])
 
         #set the image width to span from the lowest x to the highest. Same with the height
-        new_width = max(this.width+this.origin[0][0], x_max_img+1) - min(this.origin[0][0], x_min_img)
-        new_height = max(this.height+this.origin[0][1], y_max_img+1) - min(this.origin[0][1], y_min_img)
+        new_width = max(this.width+this.map_corner_coords[0][0], x_max_img+1) - min(this.map_corner_coords[0][0], x_min_img)
+        new_height = max(this.height+this.map_corner_coords[0][1], y_max_img+1) - min(this.map_corner_coords[0][1], y_min_img)
 
         #initialise empty image to copy the current image into. These are in the form of the updated image pixel coordinates. 
         old_img_new_index = np.zeros((new_height, new_width, this.depth))
         
-        #save the old origin
-        old_origin = np.copy(this.origin)
-        #new origin coordinates are the lower of the x and y values of old origin and top left corner of image to stitch
-        this.origin = np.array([[min(this.origin[0][0], x_min_img), min(this.origin[0][1], y_min_img)]], dtype=np.int)
+        #save the old map corner coordinates
+        old_map_corner_coords = np.copy(this.map_corner_coords)
+        #new map corner coordinates are the lower of the x and y values of old map_corner_coords and top left corner of image to stitch
+        this.map_corner_coords = np.array([[min(this.map_corner_coords[0][0], x_min_img), min(this.map_corner_coords[0][1], y_min_img)]], dtype=np.int)
 
         #how much to offset new image
-        offset = this.origin
+        offset = this.map_corner_coords
         #how much to offset old image
-        offset_old = this.origin-old_origin
+        offset_old = this.map_corner_coords-old_map_corner_coords
 
-        #copy every pixel from old image into the empty old_img_new_index picture which has its origin at the new origin
+        #copy every pixel from old image into the empty old_img_new_index picture which has its map_corner_coords at the new map_corner_coords
         old_img_new_index[-offset_old[0][1]:this.height-offset_old[0][1],-offset_old[0][0]:this.width-offset_old[0][0]] = this.image[:,:]
         old_img_new_index = old_img_new_index.astype(np.float32)#needed for opencv for some reason
 
         #corners of the input image
         from_pts = np.float32([[0,0], [img_width-1,0], [0, img_height-1], [img_width-1, img_height-1]])
         #where the corners go (in pixel coordinates)
-        to_pts = ((corner_pixel_values.T - this.origin.T).T).astype(np.float32)
+        to_pts = ((corner_pixel_values.T - this.map_corner_coords.T).T).astype(np.float32)
 
         if not x_max_img == x_min_img and not y_max_img == y_min_img:
             #project the image only if the pixel values arent the same. the coordinate space is the same as old_img_new_index
