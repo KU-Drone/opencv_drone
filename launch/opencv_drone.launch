@@ -1,7 +1,8 @@
 <launch>
-    <include file="$(find iq_sim)/launch/runway.launch" output="log"/>
-    <node name="sitl" pkg="iq_sim" type="startsitl.sh"/>
-    <include file="$(find iq_sim)/launch/apm.launch" output="log"/>
+
+    <include file="$(find opencv_drone)/launch/runway_modified.launch" output="log"/>
+    <node name="sitl" pkg="opencv_drone" type="startsitl.sh"/>
+    <include file="$(find opencv_drone)/launch/apm.launch" output="log"/>
     
     <node name="vision" pkg="opencv_drone" type="vision.py" args= "$(find opencv_drone)/img.jpg" output="screen" launch-prefix="xterm -e"/>
     
