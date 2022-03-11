@@ -11,6 +11,7 @@ import numpy as np
 import math as m
 
 import sys
+import time
 
 IMG_WIDTH = 640
 IMG_HEIGHT = 480
@@ -20,6 +21,8 @@ IMG_START_POINTS = []
 cam_pos = []
 cam_rotation = []
 cam_image = []
+
+first_time = 2
 
 step = 0.1
 
@@ -66,7 +69,7 @@ class ImageAppend:
         x_max_img = np.max(corner_pixel_values.T[0])
         y_min_img = np.min(corner_pixel_values.T[1])
         y_max_img = np.max(corner_pixel_values.T[1])
-
+        
         #set the image width to span from the lowest x to the highest. Same with the height
         new_width = max(this.width+this.map_corner_coords[0][0], x_max_img+1) - min(this.map_corner_coords[0][0], x_min_img)
         new_height = max(this.height+this.map_corner_coords[0][1], y_max_img+1) - min(this.map_corner_coords[0][1], y_min_img)
@@ -151,23 +154,24 @@ def posCallback(data):
     point = pose.position
     quat = pose.orientation
     cam_pos = np.array([[point.x], [point.y], [point.z]])
+
     cam_rotation = np.array(quaternion_rotation_matrix(np.array([[quat.w], [quat.x], [quat.y], [quat.z]]))).reshape((3,3))
     
-    times.append(rospy.get_time())
+    times.append(time.time())
 
     camera_points = np.matmul(cam_rotation, IMG_START_POINTS) + cam_pos
     
     projected_points = project_points(camera_points, cam_pos)
     
-    times.append(rospy.get_time())
+    times.append(time.time())
     img_append.project(cam_image, projected_points)
 
-    times.append(rospy.get_time())
+    times.append(time.time())
 
     cv2.imwrite(img_path, img_append.image)
 
-    rospy.loginfo([(times[i+1] - times[i])/(times[-1]-times[0])*100 for i in range(len(times)-1)], 1/(times[-1]-times[0]))
-    
+    rospy.loginfo(f"{[(times[i+1] - times[i])/(times[-1]-times[0])*100 for i in range(len(times)-1)]} {1/(times[-1]-times[0])}")
+
 def quaternion_rotation_matrix(Q):
     """
     Covert a quaternion into a full three-dimensional rotation matrix.
@@ -227,6 +231,7 @@ def node():
     img_append = ImageAppend(IMG_WIDTH//2, IMG_HEIGHT//2, step=step)
     if len(sys.argv) >= 2:
         img_path = sys.argv[1]
+        rospy.logdebug(img_path)
     rospy.spin()
 
 if __name__ == "__main__":
