@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import rospy
 
-import std_msgs.msg
 import sensor_msgs.msg
 from sensor_msgs.msg import Image
 from nav_msgs.msg import Odometry
@@ -11,7 +10,6 @@ import cv2
 import numpy as np
 import math as m
 
-import time
 import sys
 
 IMG_WIDTH = 640
@@ -155,20 +153,20 @@ def posCallback(data):
     cam_pos = np.array([[point.x], [point.y], [point.z]])
     cam_rotation = np.array(quaternion_rotation_matrix(np.array([[quat.w], [quat.x], [quat.y], [quat.z]]))).reshape((3,3))
     
-    times.append(time.time())
+    times.append(rospy.get_time())
 
     camera_points = np.matmul(cam_rotation, IMG_START_POINTS) + cam_pos
     
     projected_points = project_points(camera_points, cam_pos)
     
-    times.append(time.time())
+    times.append(rospy.get_time())
     img_append.project(cam_image, projected_points)
 
-    times.append(time.time())
+    times.append(rospy.get_time())
 
     cv2.imwrite(img_path, img_append.image)
 
-    print([(times[i+1] - times[i])/(times[-1]-times[0])*100 for i in range(len(times)-1)], 1/(times[-1]-times[0]))
+    rospy.loginfo([(times[i+1] - times[i])/(times[-1]-times[0])*100 for i in range(len(times)-1)], 1/(times[-1]-times[0]))
     
 def quaternion_rotation_matrix(Q):
     """
@@ -224,7 +222,7 @@ def node():
 
     IMG_START_POINTS = np.matmul(rot, calculateCamImgInitialPos(IMG_WIDTH, IMG_HEIGHT, IMG_HORIZONTAL_FOV))
 
-    print(IMG_START_POINTS)
+    rospy.loginfo(IMG_START_POINTS)
     
     img_append = ImageAppend(IMG_WIDTH//2, IMG_HEIGHT//2, step=step)
     if len(sys.argv) >= 2:
