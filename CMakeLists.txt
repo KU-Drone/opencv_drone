@@ -8,9 +8,11 @@ project(opencv_drone)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  iq_sim
   rospy
   sensor_msgs
+  nav_msgs
+  mavlink
+  mavros
 )
 
 ## System dependencies are found with CMake's conventions
