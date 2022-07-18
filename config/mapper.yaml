@@ -1,0 +1,26 @@
+map_frame_id: "map"
+scale: 0.03
+chunk_size: 200
+extrapolate_htm: True
+
+continous_output: False
+continous_output_frequency: 0.5
+continous_output_topic: "/map_out"
+
+save_location: "/home/batu/Desktop/drone"
+
+camera_0:
+  frame_id: "webcam"
+  image_topic: "/webcam/image_raw/compressed"
+  width: 640
+  height: 480
+  depth: 3
+  fov: 68.7549354 #horizontal fov 1.2 raidans
+  fov_vertical: False
+  image_queue_size: 30
+  htm_queue_size: 30
+  orthogonal_roi:
+    width_low: 0
+    width_high: 1
+    height_low: 0
+    height_high: 1

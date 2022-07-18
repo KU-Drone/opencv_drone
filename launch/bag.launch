@@ -1,0 +1,10 @@
+<launch>
+    <param name="/use_sim_time" value="true" />
+    <arg name="bag" default="$(find opencv_drone)/rosbag/2022-02-18-17-23-26.bag"/>
+    <node pkg="rosbag" type="play" name="player" output="screen" args="--clock $(arg bag)"/>
+    <node name="mavros_to_tf" pkg="message_to_tf" type="message_to_tf" args=" /mavros/global_position/local"/>
+    <node pkg="tf" type="static_transform_publisher" name="webcam_transform_publisher" args="0 0 0 0 0.7071068 0 0.7071068 base_link webcam 100" />
+    <node pkg="panorama" type="multi_cam_mapper.py" name="mapper" output="screen">
+        <rosparam command="load" file="$(find opencv_drone)/config/mapper.yaml"/>
+    </node> 
+</launch>

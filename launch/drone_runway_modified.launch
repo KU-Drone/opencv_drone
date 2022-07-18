@@ -1,0 +1,11 @@
+<launch>
+    <arg name="gui" default="true"/>
+    <include file="$(find opencv_drone)/launch/runway_modified.launch">
+        <arg name="gui" value="$(arg gui)"/>
+    </include>
+    <node name="spawn_drone" pkg="gazebo_ros" type="spawn_model" 
+        args="-file $(find opencv_drone)/models/drone_with_camera/model.sdf
+              -sdf
+              -model iris
+              -unpause"/>
+</launch>
