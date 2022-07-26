@@ -111,7 +111,11 @@ catkin_package(
 #  DEPENDS system_lib
 )
 
-catkin_install_python(PROGRAMS scripts/vision.py
+catkin_install_python(PROGRAMS 
+  scripts/vision.py
+  scripts/navigation.py
+  scripts/python_utils/utils.py
+  scripts/target_detection.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

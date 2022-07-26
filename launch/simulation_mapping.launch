@@ -1,0 +1,6 @@
+<launch>
+    <include file="$(find opencv_drone)/launch/simulation.launch"/>
+    <node pkg="panorama" type="multi_cam_mapper.py" name="mapper" output="screen">
+        <rosparam command="load" file="$(find opencv_drone)/config/mapper.yaml"/>
+    </node> 
+</launch>

@@ -1,5 +1,5 @@
 [submodule "scripts/python-utils"]
-	path = scripts/python-utils
+	path = scripts/python_utils
 	url = git@github.com:KU-AIRS-SPARK/python-utils.git
 [submodule "ardupilot"]
 	path = ardupilot
