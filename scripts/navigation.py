@@ -11,7 +11,7 @@ from mavros_msgs.srv import SetMode, SetModeRequest, CommandBool, CommandTOL
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseStamped
 from panorama.srv import RequestMap, RequestMapResponse
 from target_detection import detect_target
-from utils import *
+from kudrone_py_utils import *
 import numpy as np
 import math
 import time

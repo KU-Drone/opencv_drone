@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from python_utils import imshow_r
+from kudrone_py_utils import imshow_r
 def detect_target(image, red_range=10, min_radius=1, max_radius=400):
     image_dilate = cv2.dilate(image, np.ones((3,3), np.uint8))
 

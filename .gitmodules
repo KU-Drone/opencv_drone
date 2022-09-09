@@ -1,6 +1,6 @@
-[submodule "scripts/python-utils"]
-	path = scripts/python_utils
-	url = git@github.com:KU-AIRS-SPARK/python-utils.git
 [submodule "ardupilot"]
 	path = ardupilot
 	url = https://github.com/ArduPilot/ardupilot.git
+[submodule "scripts/kudrone_py_utils"]
+	path = scripts/kudrone_py_utils
+	url = git@github.com:KU-Drone/kudrone_py_utils.git

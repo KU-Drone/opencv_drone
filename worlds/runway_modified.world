@@ -94,7 +94,7 @@
       </link>
     </model>
     <model name='target'>
-      <pose>12.5 -100 0.3 0 -0 0</pose>
+      <pose>12.5 -100 0 0 -0 0</pose>
       <link name='link'>
         <inertial>
           <mass>1</mass>
@@ -144,7 +144,7 @@
           </material>
         </visual>
         <visual name='top'>
-          <pose>0 0 0.4 0 -0 0</pose>
+          <pose>0 0 0.3 0 -0 0</pose>
           <geometry>
             <cylinder>
               <radius>1.25</radius>

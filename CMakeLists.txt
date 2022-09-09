@@ -114,7 +114,7 @@ catkin_package(
 catkin_install_python(PROGRAMS 
   scripts/vision.py
   scripts/navigation.py
-  scripts/python_utils/utils.py
+  scripts/kudrone_py_utils/utils.py
   scripts/target_detection.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
